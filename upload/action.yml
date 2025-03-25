@@ -11,6 +11,7 @@ runs:
       with:
         name: clang-tidy-review
         path: |
+          clang_tidy_review.yaml
           clang-tidy-review-output.json
           clang-tidy-review-metadata.json
           clang_fixes.json

@@ -43,6 +43,7 @@ METADATA_FILE = Path("clang-tidy-review-metadata.json")
 REVIEW_FILE = Path("clang-tidy-review-output.json")
 PROFILE_DIR = Path("clang-tidy-review-profile")
 MAX_ANNOTATIONS = 10
+EXTEND_COMMENT_WINDOW = 2
 
 
 class Metadata(TypedDict):
@@ -786,15 +787,31 @@ def create_review_file(
             get_diagnostic_file_path(diagnostic, build_dir)
         ).as_posix()
         # diff lines are 1-indexed
-        source_line = 1 + find_line_number_from_offset(
+        start_line = 1 + find_line_number_from_offset(
             offset_lookup,
             get_diagnostic_file_path(diagnostic, build_dir),
             diagnostic_message["FileOffset"],
         )
 
-        if rel_path not in diff_lookup or end_line not in diff_lookup[rel_path]:
+        if rel_path not in diff_lookup:
             print(
                 f"WARNING: Skipping comment for file '{rel_path}' not in PR changeset. Comment body is:\n{comment_body}"
+            )
+            continue
+        source_lines_available = diff_lookup[rel_path]
+
+        source_end_line = min(source_lines_available, key=lambda x: abs(x - end_line))
+        source_start_line = min(source_lines_available, key=lambda x: abs(x - start_line))
+
+        if EXTEND_COMMENT_WINDOW < 0 or (abs(source_end_line - end_line) <= EXTEND_COMMENT_WINDOW and
+                                         abs(source_start_line - start_line) <= EXTEND_COMMENT_WINDOW):
+            print(f"Original - Start line: {start_line}, End line: {end_line}")
+            end_line = source_end_line
+            start_line = source_start_line
+            print(f"Effective - Start line: {start_line}, End line: {end_line}")
+        else:
+            print(
+                f"WARNING: Skipping comment for file '{rel_path}'. Comment not in diff. Comment body is:\n{comment_body}"
             )
             continue
 
@@ -807,11 +824,11 @@ def create_review_file(
             }
         )
         # If this is a multiline comment, we need a couple more bits:
-        if end_line != source_line:
+        if end_line != start_line:
             comments[-1].update(
                 {
                     "start_side": "RIGHT",
-                    "start_line": source_line,
+                    "start_line": start_line,
                 }
             )
 
